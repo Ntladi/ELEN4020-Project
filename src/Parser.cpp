@@ -31,18 +31,14 @@ void Parser::parseDebatesParallel()
 
 void Parser::parseSpeakersParallel()
 {
-	#pragma omp parallel for schedule(dynamic) // OpenMP Vid 10
 	for(auto i = 0; i < debateNodes.size(); i++)
 	{
-		pugi::xml_node speech = *debateNodes.at(i);
-		auto allSpeakers = organizeSpeakers(speech);
+		pugi::xml_node * speech = debateNodes.at(i);
+		auto allSpeakers = organizeSpeakers(speech, i);
 
-		#pragma omp critical
-		{
-			parsedData.push_back(allSpeakers);
-			debateMap.insert(std::pair<int, pugi::xml_node *> (i, debateNodes.at(i)));
+		parsedData.push_back(allSpeakers);
+		debateMap.insert(std::pair<int, std::string> (i, getNodeValue(speech->child_value("heading"))));
 
-		}
 	}
 }
 
@@ -68,10 +64,10 @@ void Parser::parseUniqueSpeakersParallel()
 	}
 }
 
-std::vector<std::string> Parser::organizeSpeakers(pugi::xml_node & debate)
+std::vector<std::string> Parser::organizeSpeakers(pugi::xml_node * debate, const int & i)
 {
 	std::vector<std::string> allSpeakers;
-	auto children = debate.children("debateSection");
+	auto children = debate->children("debateSection");
 
 	for(auto child: children)
 	{
@@ -89,7 +85,10 @@ std::vector<std::string> Parser::organizeSpeakers(pugi::xml_node & debate)
 
 	sort(allSpeakers.begin(), allSpeakers.end());
 	allSpeakers.erase(unique(allSpeakers.begin(), allSpeakers.end()), allSpeakers.end());
+
 	return allSpeakers;
+
+
 }
 
 void Parser::populateDebates(pugi::xml_node & debate)
@@ -130,23 +129,12 @@ Data Parser::getData() const
 	return parsedData;
 }
 
-void Parser::printDebates()
-{
-	for(auto j: debateNodes)
-		std::cout << j->child_value("heading") << std::endl;
-}
-
 SpeakerMap Parser::getSpeakers() const
 {
 	return speakers;
 }
 
-std::string Parser::getDebateHeading(pugi::xml_node * debate)
-{
-	return getNodeValue(debate->child_value("heading"));
-}
-
-DebateMap Parser::getDebateMap() const
+DebateMap Parser::getDebates() const
 {
 	return debateMap;
 }

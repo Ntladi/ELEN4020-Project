@@ -1,14 +1,9 @@
 #include "Indexer.hpp"
 
 Indexer::Indexer(const char *hansardFile):
-		parser(hansardFile), data(parser.getData()), speakers(parser.getSpeakers()), image(data.size(), speakers.size())
+		parser(hansardFile), data(parser.getData()), speakers(parser.getSpeakers())
 {
-	index = new int*[speakers.size()];
-
-	for (auto i = 0; i < speakers.size(); i++)
-		index[i] = new int[data.size()];
-
-	populateZeros();
+	initializeIndex();
 	populateIndexParallel();
 }
 
@@ -20,12 +15,16 @@ Indexer::~Indexer()
 	delete index;
 }
 
-void Indexer::populateZeros()
+void Indexer::initializeIndex()
 {
+	index = new bool*[speakers.size()];
+	for (auto i = 0; i < speakers.size(); i++)
+		index[i] = new bool[data.size()];
+
 	#pragma omp parallel for collapse(2) schedule(static)
 	for(auto i = 0; i < speakers.size(); i++)
 		for(auto j = 0; j < data.size(); j++)
-			index[i][j] = 0;
+			index[i][j] = false;
 }
 
 void Indexer::populateIndexParallel()
@@ -38,9 +37,31 @@ void Indexer::populateIndexParallel()
 		{
 			auto speakerTag = debate.at(j);
 			auto rowIndex = speakers[speakerTag];
-			index[rowIndex][i] = 1;
+			index[rowIndex][i] = true;
 		}
 	}
+}
+
+IndexedData Indexer::exportData(const std::string & fileName)
+{
+	std::ofstream output("output.bin", std::ios::binary);
+	for(auto i = 0; i < speakers.size(); i++)
+	{
+		bool buffer[data.size()];
+		#pragma omp parallel for schedule(static)
+		for(auto j = 0; j< data.size(); j++)
+			buffer[j] = index[i][j];
+
+		output.write((char*) &buffer, sizeof(buffer));
+	}
+	output.close();
+
+	IndexedData indexedData;
+	indexedData.debates = parser.getDebates();
+	indexedData.speakers = parser.getSpeakers();
+	indexedData.fileName = fileName;
+
+	return indexedData;
 }
 
 void Indexer::printMap() const
@@ -56,21 +77,3 @@ void Indexer::printMap() const
 	}
 }
 
-int ** Indexer::getMap() const
-{
-	return index;
-}
-
-void Indexer::exportBitmap(const std::string & fileName)
-{
-	bitmap_image image(21, 80);
-	image.set_all_channels(255, 255, 255);
-
-	#pragma omp parallel for schedule(static)
-	for(auto i = 0; i < 21; i++)
-		for(auto j = 0; j < 80; j++)
-			if (index[j][i] == 1)
-				image.set_pixel(i, j, 0,0,0);
-
-	image.save_image(fileName);
-}

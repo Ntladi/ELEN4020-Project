@@ -9,17 +9,15 @@
 using Data = std::vector<std::vector<std::string> >;
 using Debates = std::vector<pugi::xml_node *>;
 using SpeakerMap = std::map<std::string, int>;
-using DebateMap = std::map<int, pugi::xml_node *>;
+using DebateMap = std::map<int, std::string>;
 
 class Parser
 {
 public:
 	Parser(const char *); // Loads the Hansard Data and Parses the debates and speakers
-	void printDebates(); // Prints out the dates of all debates
 	Data getData() const; // Returns a Vector containing a vector of speakers
 	SpeakerMap getSpeakers() const; // Return a map containing the key value pairs of all unique speakers
-	DebateMap getDebateMap() const; // Returns a map containing the key value pairs of all the debates
-	std::string getDebateHeading (pugi::xml_node *);
+	DebateMap getDebates() const; // Returns a map containing the key value pairs of all the debates
 private:
 	pugi::xml_document hansardData; // Stores a reference to the Hansard data file
 	pugi::xml_node debateParentNode; // The root node for all debates
@@ -32,9 +30,10 @@ private:
 	void parseSpeakersParallel(); // Traverse the debates to find all the speakers
 	void parseUniqueSpeakersParallel(); // Traverse the parsed data and find all unique speakers
 	void populateDebates(pugi::xml_node &); // Populate the debateChildNodes vector with pointers to all the debates
-	std::vector<std::string> organizeSpeakers(pugi::xml_node &); // Sort and store the speakers while removing all duplicates
+	std::vector<std::string>  organizeSpeakers(pugi::xml_node *, const int &); // Sort and store the speakers while removing all duplicates
 	std::string charToString(const char* str) { return str; } // Convert from char array to string
 	std::string getNodeValue(const char* str); // Extract std::string values from pugi::xml_node objects
 };
+	std::string getDebateHeading (pugi::xml_node *); // Return the debate heading as a string
 
 #endif
