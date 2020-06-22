@@ -13,6 +13,7 @@ Parser::Parser(const char *hansardFile)
 
 	parseDebatesParallel();
 	parseSpeakersParallel();
+	parseUniqueSpeakersParallel();
 
 }
 
@@ -30,26 +31,44 @@ void Parser::parseDebatesParallel()
 
 void Parser::parseSpeakersParallel()
 {
-	omp_lock_t writelock;
-	omp_init_lock(&writelock);
-	#pragma omp parallel
+	#pragma omp parallel for schedule(dynamic) // OpenMP Vid 10
+	for(auto i = 0; i < debateNodes.size(); i++)
 	{
-		auto thread_id = omp_get_thread_num();
-		auto num_threads = omp_get_num_threads();
-		for(auto i = thread_id; i < debateChildNodes.size(); i+=num_threads)
-		{
-			pugi::xml_node speech = *debateChildNodes.at(i);
-			auto allSpeakers = mapSpeakers(speech);
+		pugi::xml_node speech = *debateNodes.at(i);
+		auto allSpeakers = organizeSpeakers(speech);
 
-			omp_set_lock(&writelock);
-			speakers.push_back(allSpeakers);
-			speakerMap.push_back(i);
-			omp_unset_lock(&writelock);
+		#pragma omp critical
+		{
+			parsedData.push_back(allSpeakers);
+			debateMap.insert(std::pair<int, pugi::xml_node *> (i, debateNodes.at(i)));
+
 		}
 	}
 }
 
-std::vector<std::string> Parser::mapSpeakers(pugi::xml_node & debate)
+void Parser::parseUniqueSpeakersParallel()
+{
+	std::vector<std::string> allSpeakers;
+
+	#pragma omp parallel for schedule(dynamic)
+	for(auto i = 0; i < parsedData.size(); i++)
+		for(auto j = 0; j < parsedData.at(i).size(); j++)
+		{
+			#pragma omp critical
+			allSpeakers.push_back(parsedData.at(i).at(j));
+		}
+	sort(allSpeakers.begin(), allSpeakers.end());
+	allSpeakers.erase(unique(allSpeakers.begin(), allSpeakers.end()), allSpeakers.end());
+
+	#pragma omp parallel for schedule(static)
+	for(auto i = 0; i < allSpeakers.size(); i++)
+	{
+		#pragma omp critical
+		speakers.insert(std::pair<std::string, int>(allSpeakers.at(i), i));
+	}
+}
+
+std::vector<std::string> Parser::organizeSpeakers(pugi::xml_node & debate)
 {
 	std::vector<std::string> allSpeakers;
 	auto children = debate.children("debateSection");
@@ -85,18 +104,14 @@ void Parser::populateDebates(pugi::xml_node & debate)
 			{
 				if(child.child("speech"))
 				{
-					debateChildNodes.push_back(&debate);
+					#pragma omp critical
+					debateNodes.push_back(&debate);
 					break;
 				}
 			}
 		}
 		debate = debate.next_sibling("debateSection");
 	}
-}
-
-Debates Parser::getDebates() const
-{
-	return debateChildNodes;
 }
 
 std::string Parser::getNodeValue(const char* str)
@@ -110,20 +125,28 @@ std::string Parser::getNodeValue(const char* str)
 	return result;
 }
 
-Speakers Parser::getSpeakers() const
+Data Parser::getData() const
 {
-	return speakers;
+	return parsedData;
 }
 
 void Parser::printDebates()
 {
-	for(auto j: debateChildNodes)
-	{
+	for(auto j: debateNodes)
 		std::cout << j->child_value("heading") << std::endl;
-	}
 }
 
-SpeakerKeys Parser::getKeys() const
+SpeakerMap Parser::getSpeakers() const
 {
-	return speakerMap;
+	return speakers;
+}
+
+std::string Parser::getDebateHeading(pugi::xml_node * debate)
+{
+	return getNodeValue(debate->child_value("heading"));
+}
+
+DebateMap Parser::getDebateMap() const
+{
+	return debateMap;
 }
